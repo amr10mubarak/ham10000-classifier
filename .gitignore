@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# uv
+# (uv.lock IS committed — that's what makes the environment reproducible)
+
+# Data — raw images are huge, keep them out
+data/raw/
+
+# Model checkpoints — binary, large, regenerable from training
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# Results — these get regenerated on every evaluation run
+results/*
+!results/.gitkeep
+
+# Kaggle credentials — NEVER commit these
+kaggle.json
+.kaggle/
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/

@@ -1,0 +1,15 @@
+[project]
+name = "ham10000-classifier"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=3.0.5",
+    "pillow>=12.3.0",
+    "pyyaml>=6.0.3",
+    "scikit-learn>=1.9.0",
+    "timm>=1.0.28",
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
+]
