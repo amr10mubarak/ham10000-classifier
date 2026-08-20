@@ -1,0 +1,75 @@
+ # HAM10000 skin lesion classifier — configuration
+# Every hyperparameter and path lives here. No hardcoding elsewhere.
+
+seed: 42  # For all random operations: split, augmentation, weight init
+
+# ---------------------------------------------------------------
+# Data
+# ---------------------------------------------------------------
+data:
+  # Path to the HAM10000 root folder (contains HAM10000_metadata.csv
+  # and the two image directories). Relative to the project root.
+  root: "data/raw"
+  metadata_csv: "HAM10000_metadata.csv"
+  image_dirs:
+    - "HAM10000_images_part_1"
+    - "HAM10000_images_part_2"
+
+  # The 7 diagnostic classes, in a fixed, canonical order.
+  # This order defines label indices (nv=0, mel=1, ...).
+  # Once training starts, do NOT reorder — checkpoints depend on this.
+  classes:
+    - nv       # melanocytic nevi (benign moles) — dominant class
+    - mel      # melanoma — the dangerous one
+    - bkl      # benign keratosis
+    - bcc      # basal cell carcinoma
+    - akiec    # actinic keratoses / intraepithelial carcinoma
+    - vasc     # vascular lesions
+    - df       # dermatofibroma
+
+  # Where the split CSVs (train.csv, val.csv, test.csv) get saved.
+  splits_dir: "data/splits"
+
+  # Train/val/test fractions. Must sum to 1.0.
+  # Split is by lesion_id (not image_id) to prevent leakage.
+  split:
+    train: 0.70
+    val: 0.15
+    test: 0.15
+
+# ---------------------------------------------------------------
+# Model
+# ---------------------------------------------------------------
+model:
+  name: "resnet50"      # timm model name
+  pretrained: true       # start from ImageNet weights, don't train from scratch
+  num_classes: 7
+
+# ---------------------------------------------------------------
+# Training
+# ---------------------------------------------------------------
+training:
+  image_size: 224        # standard for ImageNet-pretrained backbones
+  batch_size: 32
+  num_workers: 4         # DataLoader parallelism
+  epochs: 20
+  learning_rate: 3.0e-4
+  weight_decay: 1.0e-4
+  optimizer: "adamw"
+
+  # Handle class imbalance. Options: "weighted_loss" | "weighted_sampler" | "none"
+  # We'll decide between these two in Phase 2; keeping the knob here.
+  imbalance_strategy: "weighted_loss"
+
+  # Where to save checkpoints during training (Phase 2)
+  checkpoint_dir: "checkpoints"
+
+# ---------------------------------------------------------------
+# Normalization
+# ---------------------------------------------------------------
+# ImageNet mean/std, because we're using an ImageNet-pretrained backbone.
+# The pretrained weights expect inputs normalized to this distribution.
+# Using dataset-specific stats here would break the pretraining assumption.
+normalize:
+  mean: [0.485, 0.456, 0.406]
+  std:  [0.229, 0.224, 0.225]
