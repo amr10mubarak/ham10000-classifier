@@ -1,0 +1,32 @@
+# Data — the model was trained on this, doesn't need it at runtime
+data/
+
+# Python virtualenvs and caches
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# uv artifacts (Docker uses requirements.txt directly)
+uv.lock
+pyproject.toml
+.python-version
+
+# Git
+.git/
+.gitignore
+
+# IDE / OS
+.vscode/
+.DS_Store
+
+# Notebooks and dev artifacts
+*.ipynb
+.ipynb_checkpoints/
+
+# Results (not needed at inference time)
+results/
+
+# Kaggle credentials — never bake secrets into images
+kaggle.json
+.kaggle/
