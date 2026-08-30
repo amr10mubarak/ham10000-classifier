@@ -5,13 +5,14 @@ Reads all hyperparameters from config.yaml. Nothing hardcoded.
 import argparse
 from pathlib import Path
 
-
+import csv
+import os
 import timm
 import torch
 import yaml
 
 from torch.utils.data import DataLoader
-
+from sklearn.metrics import f1_score, recall_score
 from src.data import HAM10000Dataset
 from src.transforms import build_train_transforms, build_eval_transforms
 
@@ -152,6 +153,88 @@ def train_one_epoch(
 
     return total_loss / n_batches
 
+@torch.no_grad()
+def evaluate(
+    model: torch.nn.Module,
+    loader: DataLoader,
+    loss_fn: torch.nn.Module,
+    device: torch.device,
+    num_classes: int,
+) -> dict:
+    """Evaluate the model on a loader. Returns loss, macro F1, per-class recall."""
+    model.eval()
+    total_loss = 0.0
+    n_batches = 0
+    all_preds = []
+    all_labels = []
+
+    for images, labels in loader:
+        images = images.to(device)
+        labels = labels.to(device)
+
+        logits = model(images)
+        loss = loss_fn(logits, labels)
+        preds = logits.argmax(dim=1)
+
+        total_loss += loss.item()
+        n_batches += 1
+        all_preds.append(preds.cpu())
+        all_labels.append(labels.cpu())
+
+    all_preds = torch.cat(all_preds).numpy()
+    all_labels = torch.cat(all_labels).numpy()
+
+    return {
+        "loss": total_loss / n_batches,
+        "macro_f1": f1_score(all_labels, all_preds, average="macro", zero_division=0),
+        "per_class_recall": recall_score(
+            all_labels, all_preds, average=None, zero_division=0,
+            labels=list(range(num_classes)),
+        ),
+    }
+
+def log_epoch(
+    csv_path: str,
+    epoch: int,
+    train_loss: float,
+    val_metrics: dict,
+    class_names: list[str],
+) -> None:
+    """Append one row of per-epoch metrics to a CSV. Creates header on first call."""
+    os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+    is_new = not os.path.exists(csv_path)
+
+    row = {
+        "epoch": epoch,
+        "train_loss": round(train_loss, 4),
+        "val_loss": round(val_metrics["loss"], 4),
+        "val_macro_f1": round(val_metrics["macro_f1"], 4),
+    }
+    for name, recall in zip(class_names, val_metrics["per_class_recall"]):
+        row[f"recall_{name}"] = round(recall, 4)
+
+    with open(csv_path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=row.keys())
+        if is_new:
+            writer.writeheader()
+        writer.writerow(row)
+
+def save_checkpoint(
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    epoch: int,
+    val_metrics: dict,
+    path: str,
+) -> None:
+    """Save model weights + optimizer state + metadata for resuming."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    torch.save({
+        "epoch": epoch,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "val_metrics": val_metrics,
+    }, path)
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config.yaml")
@@ -161,8 +244,7 @@ def main():
     device = get_device()
     print(f"Device: {device}")
 
-    model = build_model(cfg["model"])
-    model = model.to(device)
+    model = build_model(cfg["model"]).to(device)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"Model: {cfg['model']['name']}, {n_params:,} parameters")
 
@@ -170,14 +252,35 @@ def main():
     print(f"Train batches: {len(train_loader)}, Val batches: {len(val_loader)}")
 
     loss_fn = build_loss(cfg, train_loader, device)
-
     optimizer = build_optimizer(cfg, model)
-    print(f"Optimizer: {type(optimizer).__name__}, lr={cfg['training']['learning_rate']}")
+    print(f"Optimizer: {type(optimizer).__name__}, "
+          f"lr={cfg['training']['learning_rate']}\n")
 
-    # One quick epoch to prove the loop runs
-    print("\nRunning one training epoch...")
-    avg_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
-    print(f"Epoch 1 average loss: {avg_loss:.4f}")
+    num_epochs = cfg["training"]["epochs"]
+    num_classes = cfg["model"]["num_classes"]
+    class_names = cfg["data"]["classes"]
+    ckpt_path = os.path.join(cfg["training"]["checkpoint_dir"], "best.pt")
+    csv_path = "results/metrics.csv"
+
+    best_f1 = -1.0
+    for epoch in range(1, num_epochs + 1):
+        train_loss = train_one_epoch(model, train_loader, loss_fn, optimizer, device)
+        val_metrics = evaluate(model, val_loader, loss_fn, device, num_classes)
+
+        print(
+            f"Epoch {epoch:2d}/{num_epochs}  "
+            f"train_loss={train_loss:.4f}  "
+            f"val_loss={val_metrics['loss']:.4f}  "
+            f"val_f1={val_metrics['macro_f1']:.4f}"
+        )
+        log_epoch(csv_path, epoch, train_loss, val_metrics, class_names)
+
+        if val_metrics["macro_f1"] > best_f1:
+            best_f1 = val_metrics["macro_f1"]
+            save_checkpoint(model, optimizer, epoch, val_metrics, ckpt_path)
+            print(f"  ↑ new best val F1: {best_f1:.4f} — checkpoint saved")
+
+    print(f"\nTraining complete. Best val F1: {best_f1:.4f}")
 
 if __name__ == "__main__":
     main()
