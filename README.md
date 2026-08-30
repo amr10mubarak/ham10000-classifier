@@ -62,7 +62,7 @@ The split manifests (`data/splits/train.csv`, `val.csv`, `test.csv`) are committ
 Everything is bundled in the container: model, dependencies, code. No Python installation required on your machine.
 
 **Prerequisites:** [Docker](https://docs.docker.com/get-docker/) installed and running.
-
+> **Note:** The Docker image bundles the trained model checkpoint (`checkpoints/best.pt`, ~270MB), which is not committed to this repository. Before building, either train the model yourself (see [Reproducing the training run](#reproducing-the-training-run)) or obtain the checkpoint separately. The build will fail with a `COPY` error if `checkpoints/best.pt` is missing.
 ```bash
 # Clone
 git clone https://github.com/amr10mubarak/ham10000-classifier.git
